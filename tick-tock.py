@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """Tick-Tock! RCD1610 Ethernet relay board controller.
 
 This small tool can help you to control the relay board and
@@ -6,18 +6,12 @@ monitor its current status.
                                     PHLin <po-hsu.lin@canonical.com>
 """
 
-import sys
-import json
-import time
-import urllib2
 import argparse
-
-IP = "http://192.168.1.25"
-API = "/pwr/relays/"
-ACTION = "&value="
-PASSWD = "123456"
-RELAYS = 16
-TIMEOUT = 1
+import configparser
+import json
+import sys
+import time
+from urllib.request import urlopen, URLError
 
 
 class colors:
@@ -34,13 +28,31 @@ STAT = [colors.r + "OFF" + colors.end,
         colors.g + " ON" + colors.end]
 
 
+def _load_config():
+    """Load the config file."""
+    config = configparser.SafeConfigParser()
+    config.readfp(open(r'settings.txt'))
+    global IP
+    global API
+    global ACTION
+    global PASSWD
+    global RELAYS
+    global TIMEOUT
+    IP = config.get("HW Settings", "IP").replace('"', '')
+    API = config.get("HW Settings", "API").replace('"', '')
+    ACTION = config.get("HW Settings", "ACTION").replace('"', '')
+    PASSWD = config.get("HW Settings", "PASSWD").replace('"', '')
+    RELAYS = int(config.get("HW Settings", "RELAYS"))
+    TIMEOUT = int(config.get("HW Settings", "TIMEOUT"))
+
+
 def _print_relay():
     """Print the relay number sequentially."""
-    print "Query with timeout={} seconds on each relay".format(TIMEOUT)
+    print("Query with timeout = {} seconds on each relay".format(TIMEOUT))
     output = "Relay:"
     for i in range(1, RELAYS + 1, 1):
         output += ("%2i |" % i)
-    print output
+    print(output)
 
 
 def _print_status():
@@ -50,9 +62,9 @@ def _print_status():
     for i in range(1, RELAYS + 1, 1):
         try:
             url = IP + API + '{}?ac={}'.format(i, PASSWD)
-            response = json.loads(urllib2.urlopen(url, timeout=TIMEOUT).read())['v']
+            response = json.loads(urlopen(url, timeout=TIMEOUT).read().decode("utf-8"))['v']
             output += STAT[response] + "|"
-        except urllib2.URLError, e:
+        except URLError as e:
             err_flag = True
             output += (colors.y + "ERR" + colors.end + "|")
             sys.stdout.write("\r%s" % output)
@@ -60,7 +72,7 @@ def _print_status():
             sys.exit(0)
     sys.stdout.write("\r%s" % output)
     if err_flag:
-        print("\nError: " + str(e.reason))
+        print("\nERR: " + str(e.reason))
         sys.exit(1)
 
 
@@ -87,18 +99,21 @@ def monitor(rate):
 
 def activate(targets):
     """Invert the status of the assigned relay."""
+    if targets == []:
+        print("ERR: please assign relay id(s)")
+        sys.exit(1)
     for i in targets:
         if i < 1 or i > RELAYS:
             print("ERR: Relay number %i out of range, skipping" % i)
             continue
         url = IP + API + "{}?ac={}".format(i, PASSWD)
         try:
-            response = 1 - json.loads(urllib2.urlopen(url).read())['v']
+            response = 1 - json.loads(urlopen(url).read().decode("utf-8"))['v']
             url = IP + API + "{}?ac={}".format(i, PASSWD) + ACTION + str(response)
-            response = json.loads(urllib2.urlopen(url).read())['v']
+            response = json.loads(urlopen(url).read().decode("utf-8"))['v']
             print("Relay %i is now in %s stat" % (i, STAT[response]))
-        except urllib2.URLError, e:
-            print("Error: " + str(e.reason))
+        except URLError as e:
+            print("ERR: " + str(e.reason))
             break
 
 
@@ -119,7 +134,7 @@ def main():
                                         help="Query the status of all relays")
     stat_parser.set_defaults(func=status)
     flip_parser = subparsers.add_parser('flip',
-                                        help="Invert the status of certain relay(s)")
+                                        help="Invert the status of given relay(s)")
     flip_parser.set_defaults(func=activate)
     flip_parser.add_argument('idx',
                              default=[],
@@ -128,10 +143,11 @@ def main():
                              help="The index of relay(s)")
     args = parser.parse_args()
 
-    if args.func.func_name is None:
+    if args.func.__name__ is None:
         parser.parse_args(['-h'])
     else:
-        if args.func.func_name is not 'status':
+        _load_config()
+        if args.func.__name__ is not 'status':
             args.func(args.idx)
         else:
             args.func()
