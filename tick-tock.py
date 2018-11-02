@@ -58,6 +58,7 @@ def _print_relay():
 def _print_status():
     """Print the relay status sequentially."""
     err_flag = False
+    err_reason = ''
     output = "Stat: "
     for i in range(1, RELAYS + 1, 1):
         try:
@@ -66,13 +67,15 @@ def _print_status():
             output += STAT[response] + "|"
         except URLError as e:
             err_flag = True
+            err_reason = e.reason
             output += (colors.y + "ERR" + colors.end + "|")
             sys.stdout.write("\r%s" % output)
         except KeyboardInterrupt:
             sys.exit(0)
     sys.stdout.write("\r%s" % output)
     if err_flag:
-        print("\nERR: " + str(e.reason))
+        print("\nERR, reason:")
+        print(err_reason)
         sys.exit(1)
 
 
